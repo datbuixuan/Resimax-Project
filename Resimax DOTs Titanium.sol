@@ -135,7 +135,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     }  
      
 
-    function _payout(uint256 quantity) internal {
+    function _payout(uint256 quantity) private {
         uint256 totalPrice = Asset.PricePerToken * quantity;
         require(msg.value >= totalPrice, "Insufficient payment amount");
         ReceiveAddress.transfer(msg.value);
@@ -144,7 +144,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     }
 
 
-     function _mintAsset(uint256 quantity) internal {                     
+     function _mintAsset(uint256 quantity) private {                     
         for(uint256 i = 0; i < quantity; i++){
             uint256 newItemId = totalSupply();
             _safeMint(msg.sender, newItemId);
