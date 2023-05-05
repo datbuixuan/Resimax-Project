@@ -90,11 +90,11 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
 
         for(uint256 i = 0; i < nftId.length; i++){
             uint256 newItemId = totalSupply();
-            _safeMint(owner, newItemId);
-    
-            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            Items[newItemId] = metadata;
+            _safeMint(owner, newItemId);   
+           
+            Items[newItemId] = Strings.toString(newItemId);
             
+            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
             string memory fTokenURI = string.concat(DomainURI, metadata);
          
             Asset.ItemMinted ++;
@@ -147,13 +147,13 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
      function _mintAsset(uint256 quantity) private {                     
         for(uint256 i = 0; i < quantity; i++){
             uint256 newItemId = totalSupply();
-            _safeMint(msg.sender, newItemId);
-    
-            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            Items[newItemId] = metadata;
+            _safeMint(msg.sender, newItemId);   
+         
+            Items[newItemId] = Strings.toString(newItemId);
             
             Asset.ItemMinted ++;           
 
+            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
             string memory fTokenURI = string.concat(DomainURI, metadata);
             
             emit claimItemEvent(fTokenURI, newItemId, msg.sender, RoyaltyAddress, RoyaltyPercentage);
@@ -187,7 +187,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "No Token ID exists");
 
-        return string.concat(DomainURI, Items[tokenId]); 
+        return string.concat(DomainURI, MetadataURI, Items[tokenId]); 
     }
 
     function contractURI() public view returns (string memory) {

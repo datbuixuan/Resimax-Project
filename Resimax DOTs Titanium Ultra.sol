@@ -58,7 +58,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
             _safeMint(owner, newItemId);
     
             string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            Items[newItemId] = metadata;
+            Items[newItemId] = Strings.toString(newItemId);
             
             string memory fTokenURI = string.concat(DomainURI, metadata);
          
@@ -94,7 +94,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "No Token ID exists");
 
-        return string.concat(DomainURI, Items[tokenId]); 
+        return string.concat(DomainURI, MetadataURI, Items[tokenId]); 
     }
 
     function contractURI() public view returns (string memory) {
