@@ -1,4 +1,4 @@
-// contracts/Coinllectibles.sol
+// contracts/Marvion.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -9,44 +9,30 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 
 contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {   
-    struct IAsset{
-        uint256 ItemTotal;
-        uint256 ItemMinted;
-        uint256 PricePerToken;
-        bool IsActivated;
-    }
-
     enum saleState{PrivateSale, PublicSale}
-    
-    IAsset private Asset;
-    mapping (uint256 => string) private Items;
+    saleState public SaleState;
    
     mapping (address => bool) private Admin;
     address[] private AdminAddress;
 
     mapping (address => bool) public IsWhitelist;
-    mapping (address => uint256) public DOTMintedNumber;
     address[] private WhiteListAddress;
 
+    uint256 private PricePerToken;
+    uint256 private MaxSupply;
+    bool private IsPaused;
 
-  
     string private ContractURI;
-    string public DomainURI;
     string public MetadataURI;
-
-    saleState public SaleState;
-
-    address payable public ReceiveAddress;
+   
     uint256 public MaximumDOTPerWallet;
 
     address public RoyaltyAddress;
     uint96 public RoyaltyPercentage; // *10
     
 
-    modifier CheckMetadataAndDomain(){
-        require(keccak256(abi.encodePacked(DomainURI)) != keccak256(abi.encodePacked("")), "The Domain URI is empty");
-        
-        require(keccak256(abi.encodePacked(MetadataURI)) != keccak256(abi.encodePacked("")), "The Metadata URI is empty");
+    modifier CheckMetadata(){
+      require(keccak256(abi.encodePacked(MetadataURI)) != keccak256(abi.encodePacked("")), "The Metadata URI is empty");
         _;
     }
 
@@ -55,110 +41,103 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         _;
     }
 
-    constructor (string memory name, string memory symbol, uint96 royaltyPercentage, address royaltyAddress) ERC721(name, symbol){
+    constructor (string memory name, string memory symbol, uint96 royaltyPercentage, address royaltyAddress,
+      uint256 pricePerToken, uint256 maxSupply) ERC721(name, symbol){
+        
         require(royaltyAddress != address(0));
         require(royaltyPercentage > 0);
-        
+
         RoyaltyAddress = royaltyAddress;
         RoyaltyPercentage = royaltyPercentage;
-     
-        AdminAddress.push(msg.sender);
+        PricePerToken = pricePerToken;
+        MaxSupply = maxSupply;
 
+        AdminAddress.push(msg.sender);
         Admin[msg.sender] = true;
 
         SaleState = saleState.PrivateSale;
-
-        ReceiveAddress = payable(msg.sender);
 
         MaximumDOTPerWallet = 3;
     }
     
     event createItemsEvent(uint256 nftId, string uri, uint256 itemId, address owner, address royaltyAddress, uint96 royaltyPercentage);
     event claimItemEvent(string uri, uint256 itemId, address owner, address royaltyAddress, uint96 royaltyPercentage);
-    event payForDOTEvent (address from, address to, uint256 totalPrice);
+    event payForDOTEvent (address from, uint256 totalPrice);
     event addItemsToWhiteListEvent(address[] walletAddresses);
     event removeItemsOnWhiteListEvent(address [] walletAddresses);
     event addItemsToAdminListEvent(address[] walletAddresses);
     event removeItemsOnAdminListEvent(address [] walletAddresses);
-    event updateAssetDataEvent (uint256 itemTotal, uint256 pricePerToken, bool isActivated);
     event changeSaleStatusEvent (saleState saleStatus);
+    event changeMaxSupplyEvent (uint256 maxSupply);
+    event changePricePerTokenEvent (uint256 pricePerToken);
+    event withdrawEvent(uint256 totalAmount, address toAddress);        
+    event changePausedStatusEvent(bool paused);
 
-
-    function createItems(uint256[] memory nftId, address owner) public CheckMetadataAndDomain onlyAdmin{ 
-        require(nftId.length > 0, "The data is incorrect");
-        require(Asset.IsActivated, "Asset is unavailable");
+    function createItems(uint256[] memory nftId, address owner) public CheckMetadata onlyAdmin{ 
+        require(nftId.length > 0, "The input data is incorrect");
+        require(IsPaused == false, "Contract is paused for minting");
+        require((MaxSupply - totalSupply()) >= nftId.length, "The claim left is unavailable");
 
         for(uint256 i = 0; i < nftId.length; i++){
             uint256 newItemId = totalSupply();
             _safeMint(owner, newItemId);   
-           
-            Items[newItemId] = Strings.toString(newItemId);
-            
-            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            string memory fTokenURI = string.concat(DomainURI, metadata);
-         
-            Asset.ItemMinted ++;
-
+                  
+            string memory fTokenURI = string.concat(MetadataURI, Strings.toString(newItemId));
+        
             emit createItemsEvent(nftId[i], fTokenURI, newItemId, owner, RoyaltyAddress, RoyaltyPercentage);
        }
     }
 
-    function claim(uint256 quantity) payable public CheckMetadataAndDomain {
-        require (ReceiveAddress != address(0), "The reveive wallet is incorrect");    
-        require (quantity > 0, "The input data is incorrect");
-
-        require (Asset.IsActivated, "The Asset is not active");
-        require ((Asset.ItemTotal - Asset.ItemMinted) >= quantity, "The claim left is unavailable");
+    function claim(uint256 quantity) payable public CheckMetadata {
+        require (quantity > 0, "The input data is incorrect");       
+        require(IsPaused == false, "Contract is paused for minting");
+        require ((MaxSupply - totalSupply()) >= quantity, "The claim left is unavailable");
    
 
-        if(SaleState == saleState.PrivateSale){
-            bool isWhiteList = IsWhitelist[msg.sender];
-                
-            require (isWhiteList, "You are not permission");
-
-            uint256 dotMintedNumber = DOTMintedNumber[msg.sender];
-            require(dotMintedNumber < MaximumDOTPerWallet, "You have minted more than the allowed amount");
+        if(SaleState == saleState.PrivateSale){             
+            require (IsWhitelist[msg.sender], "You are not permission");
+            require((balanceOf(msg.sender) + quantity) <= MaximumDOTPerWallet, "You have minted more than the allowed amount");
             
             _mintAsset(quantity);     
 
-            _payout(quantity);
-
-            DOTMintedNumber[msg.sender] += quantity;            
+            _payout(quantity);                    
         }
         else if(SaleState == saleState.PublicSale){                  
             _mintAsset(quantity);  
-
-            _payout(quantity);
-
-            DOTMintedNumber[msg.sender] += quantity;           
+            
+            _payout(quantity);                 
         }
     }  
+
+    function withdraw(uint256 totalAmount, address payable toAddress) onlyOwner public {                     
+        require(toAddress != address(0), "The input data is incorrect");
+        require (totalAmount <= address(this).balance, "Insufficient amount");
+       
+        (toAddress).transfer(totalAmount);
+            
+        emit withdrawEvent(totalAmount, toAddress);        
+    }
      
 
     function _payout(uint256 quantity) private {
-        uint256 totalPrice = Asset.PricePerToken * quantity;
+        uint256 totalPrice = PricePerToken * quantity;
         require(msg.value >= totalPrice, "Insufficient payment amount");
-        ReceiveAddress.transfer(msg.value);
     
-        emit payForDOTEvent(msg.sender, ReceiveAddress, totalPrice);
+        emit payForDOTEvent(msg.sender, totalPrice);
     }
 
 
-     function _mintAsset(uint256 quantity) private {                     
+    function _mintAsset(uint256 quantity) private {                     
         for(uint256 i = 0; i < quantity; i++){
             uint256 newItemId = totalSupply();
             _safeMint(msg.sender, newItemId);   
-         
-            Items[newItemId] = Strings.toString(newItemId);
-            
-            Asset.ItemMinted ++;           
-
-            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            string memory fTokenURI = string.concat(DomainURI, metadata);
+                 
+            string memory fTokenURI = string.concat(MetadataURI, Strings.toString(newItemId));
             
             emit claimItemEvent(fTokenURI, newItemId, msg.sender, RoyaltyAddress, RoyaltyPercentage);
         }
     }
+   
 
     function setApprovalForItems(address to, uint256[] memory tokenIds) public{
         require(tokenIds.length > 0, "The input data is incorrect");
@@ -187,22 +166,30 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "No Token ID exists");
 
-        return string.concat(DomainURI, MetadataURI, Items[tokenId]); 
+        return string.concat(MetadataURI, Strings.toString(tokenId)); 
     }
 
     function contractURI() public view returns (string memory) {
         return ContractURI;
     }
 
-    function getAssetInformation() public view returns (IAsset memory) {
-        return Asset;
+    function getPricePerToken() public view returns (uint256){
+        return PricePerToken;
+    }
+
+    function getMaxSupply() public view returns (uint256){
+        return MaxSupply;
+    }
+
+    function isPaused() public view returns (bool){
+        return IsPaused;
     }
 
     function nWhiteListWallet() public view returns (uint256){
         return WhiteListAddress.length;
     }
 
-   function getWalletOnWhiteList(uint256 index) public view returns (address, bool){
+    function getWalletOnWhiteList(uint256 index) public view returns (address, bool){
         address wlAddress = WhiteListAddress[index];
 
         bool isWhiteList = IsWhitelist[wlAddress];
@@ -239,19 +226,11 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         ContractURI = contractUri;
     }
 
-    function setDomainURI(string memory domainUri) public onlyOwner{
-        DomainURI = domainUri;
-    }
-
     function setMetadataURI(string memory metadataUri) public onlyOwner{
         MetadataURI = metadataUri;
     }
 
-    function setReceiveAddress(address payable receiveAddress) public onlyOwner{
-        ReceiveAddress = receiveAddress;
-    }
-
-     function setMaximumDOTPerWallet(uint256 maximumDOTPerWallet) public onlyOwner{
+    function setMaximumDOTPerWallet(uint256 maximumDOTPerWallet) public onlyOwner{
         MaximumDOTPerWallet = maximumDOTPerWallet;
     }
 
@@ -303,7 +282,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
 
     // admin permission
     function addWalletToAdminList(address[] memory wallets) public onlyOwner{
-         for(uint256 i = 0; i < wallets.length; i++){            
+        for(uint256 i = 0; i < wallets.length; i++){            
             require(!Admin[wallets[i]], "These Wallets are added");
 
             bool isAdded = false;
@@ -341,19 +320,21 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         emit changeSaleStatusEvent(SaleState);
     }
 
+    function setPausedStatus(bool status) public onlyAdmin{
+        IsPaused = status;
 
-    function updateAssetData (uint256 _itemTotal,  uint256 _pricePerToken, bool _isActivated) public onlyAdmin{
-        IAsset storage assetData = Asset;
-    
-        if(assetData.ItemTotal != _itemTotal) 
-            assetData.ItemTotal = _itemTotal;
+        emit changePausedStatusEvent(IsPaused);
+    }
 
-        if(assetData.PricePerToken != _pricePerToken)
-            assetData.PricePerToken = _pricePerToken;
+    function updateSupplyTotal(uint256 maxSupply) public onlyAdmin{
+        MaxSupply = maxSupply;
 
-        if(assetData.IsActivated != _isActivated)
-            assetData.IsActivated = _isActivated;
+        emit changeMaxSupplyEvent(MaxSupply);
+    }
 
-        emit updateAssetDataEvent(assetData.ItemTotal, assetData.PricePerToken, assetData.IsActivated); 
+    function updatePricePerToken(uint256 pricePerToken)public onlyAdmin{
+        PricePerToken = pricePerToken;
+
+        emit changePricePerTokenEvent(MaxSupply);
     }
 }
