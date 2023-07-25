@@ -1,29 +1,24 @@
-// contracts/Coinllectibles.sol
+// contracts/Marvion.sol
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.18;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 
-contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {      
-  mapping (uint256 => string) private Items;
-   
+contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {         
     mapping (address => bool) private Admin;
     address[] private AdminAddress;
 
-  
     string private ContractURI;
-    string public DomainURI;
     string public MetadataURI;
     address public RoyaltyAddress;
     uint96 public RoyaltyPercentage; // *10
+    uint256 public MaxSupply;
     
 
-    modifier CheckMetadataAndDomain(){
-        require(keccak256(abi.encodePacked(DomainURI)) != keccak256(abi.encodePacked("")), "The Domain URI is empty");
-        
+    modifier CheckMetadata(){        
         require(keccak256(abi.encodePacked(MetadataURI)) != keccak256(abi.encodePacked("")), "The Metadata URI is empty");
         _;
     }
@@ -33,34 +28,33 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         _;
     }
 
-    constructor (string memory name, string memory symbol, uint96 royaltyPercentage, address royaltyAddress) ERC721(name, symbol){
+    constructor (string memory name, string memory symbol, uint256 maxSupply, uint96 royaltyPercentage, address royaltyAddress) ERC721(name, symbol){
         require(royaltyAddress != address(0));
         require(royaltyPercentage > 0);
         
         RoyaltyAddress = royaltyAddress;
         RoyaltyPercentage = royaltyPercentage;
+
+        MaxSupply = maxSupply;
      
         AdminAddress.push(msg.sender);
 
         Admin[msg.sender] = true;
-
     }
     
     event createItemsEvent(uint256 nftId, string uri, uint256 itemId, address owner, address royaltyAddress, uint96 royaltyPercentage);
     event addItemsToAdminListEvent(address[] walletAddresses);
     event removeItemsOnAdminListEvent(address [] walletAddresses);
   
-    function createItems(uint256[] memory nftId, address owner) public CheckMetadataAndDomain onlyAdmin{ 
+    function createItems(uint256[] memory nftId, address owner) public CheckMetadata onlyAdmin{ 
         require(nftId.length > 0, "The data is incorrect");
-    
+        require((MaxSupply - totalSupply()) >= nftId.length, "The claim left is unavailable");
+
         for(uint256 i = 0; i < nftId.length; i++){
             uint256 newItemId = totalSupply();
             _safeMint(owner, newItemId);
-    
-            string memory metadata = string.concat(MetadataURI, Strings.toString(newItemId));
-            Items[newItemId] = Strings.toString(newItemId);
-            
-            string memory fTokenURI = string.concat(DomainURI, metadata);
+                
+            string memory fTokenURI = string.concat(MetadataURI, Strings.toString(newItemId));
          
            emit createItemsEvent(nftId[i], fTokenURI, newItemId, owner, RoyaltyAddress, RoyaltyPercentage);
        }
@@ -94,7 +88,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "No Token ID exists");
 
-        return string.concat(DomainURI, MetadataURI, Items[tokenId]); 
+        return string.concat(MetadataURI, Strings.toString(tokenId)); 
     }
 
     function contractURI() public view returns (string memory) {
@@ -130,8 +124,8 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         ContractURI = contractUri;
     }
 
-    function setDomainURI(string memory domainUri) public onlyOwner{
-        DomainURI = domainUri;
+    function setMaxSupply(uint256 maxSupply) public onlyOwner{
+        MaxSupply = maxSupply;
     }
 
     function setMetadataURI(string memory metadataUri) public onlyOwner{
@@ -150,7 +144,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
 
     // admin permission
     function addWalletToAdminList(address[] memory wallets) public onlyOwner{
-         for(uint256 i = 0; i < wallets.length; i++){            
+        for(uint256 i = 0; i < wallets.length; i++){            
             require(!Admin[wallets[i]], "These Wallets are added");
 
             bool isAdded = false;
@@ -165,7 +159,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
             }
             
             Admin[wallets[i]] = true;
-         }    
+        }    
 
         emit addItemsToAdminListEvent(wallets);
     }
