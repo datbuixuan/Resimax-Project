@@ -1776,6 +1776,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     event changeSaleStatusEvent (saleState saleStatus);
     event changeMaxSupplyEvent (uint256 maxSupply);
     event changePricePerTokenEvent (uint256 pricePerToken);
+    event changeMaxItemPerWalletEvent(uint256 maximumItem);
     event withdrawEvent(uint256 totalAmount, address toAddress);        
     event changePausedStatusEvent(bool paused);
 
@@ -1936,10 +1937,6 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         MetadataURI = metadataUri;
     }
 
-    function setMaximumDOTPerWallet(uint256 maximumDOTPerWallet) public onlyOwner{
-        MaximumDOTPerWallet = maximumDOTPerWallet;
-    }
-
     function changeRoyaltyReceiver(address royaltyAddress) onlyOwner public{
         require(royaltyAddress != address(0));
         RoyaltyAddress = royaltyAddress;
@@ -2019,7 +2016,7 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
     }
 
 
-    // setting sale
+    // sale setting
     function changeSaleStatus(saleState state) public onlyAdmin{
         SaleState = state;
 
@@ -2042,5 +2039,11 @@ contract MarvionToken is ERC721Enumerable, IERC2981, Ownable {
         PricePerToken = pricePerToken;
 
         emit changePricePerTokenEvent(MaxSupply);
+    }
+
+    function setMaximumDOTPerWallet(uint256 maximumDOTPerWallet) public onlyAdmin{
+        MaximumDOTPerWallet = maximumDOTPerWallet;
+
+        emit changeMaxItemPerWalletEvent(MaximumDOTPerWallet);
     }
 }
